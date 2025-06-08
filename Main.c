@@ -1,83 +1,125 @@
 #include "raylib.h"
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
 
-#define SCREEN_WIDTH 1500
+#define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
-#define SQUARE_SIZE 20
-#define MAX_LENGTH 1000
 
-int main() {
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SNAKE");
-    SetTargetFPS(10);
+#define PLAYER_WIDTH 60
+#define PLAYER_HEIGHT 20
+#define PLAYER_SPEED 6
 
-    int snakeX[MAX_LENGTH] = {(SCREEN_WIDTH / (SQUARE_SIZE * 2)) * SQUARE_SIZE};
-    int snakeY[MAX_LENGTH] = {(SCREEN_HEIGHT / (SQUARE_SIZE * 2)) * SQUARE_SIZE};
-    int snakeLength = 1;
-    int speed = SQUARE_SIZE;
-    int direction = 0;
+#define ALIEN_SIZE 40
+#define ALIEN_ROWS 4
+#define ALIEN_COLS 10
+#define ALIEN_SPEED 1
+
+#define BULLET_WIDTH 6
+#define BULLET_HEIGHT 12
+#define BULLET_SPEED 10
+
+typedef struct {
+    float x, y;
+    bool active;
+} Bullet;
+
+typedef struct {
+    float x, y;
+    bool alive;
+} Alien;
+
+int main(void) {
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Galaxian - Shooting Version");
+    SetTargetFPS(60);
+
+    float playerX = SCREEN_WIDTH / 2 - PLAYER_WIDTH / 2;
+    float playerY = SCREEN_HEIGHT - PLAYER_HEIGHT - 10;
+
+    Bullet bullet = {0};
+    bullet.active = false;
+
+    Alien aliens[ALIEN_ROWS * ALIEN_COLS] = {0};
+    for (int row = 0; row < ALIEN_ROWS; row++) {
+        for (int col = 0; col < ALIEN_COLS; col++) {
+            aliens[row * ALIEN_COLS + col].x = col * (ALIEN_SIZE + 10) + 35;
+            aliens[row * ALIEN_COLS + col].y = row * (ALIEN_SIZE + 10) + 50;
+            aliens[row * ALIEN_COLS + col].alive = true;
+        }
+    }
+
     int score = 0;
-    bool gameOver = false;
-
-    srand(time(NULL));
-    int foodX = (rand() % (SCREEN_WIDTH / SQUARE_SIZE)) * SQUARE_SIZE;
-    int foodY = (rand() % (SCREEN_HEIGHT / SQUARE_SIZE)) * SQUARE_SIZE;
-    printf("Food Spawned: (%d, %d)\n", foodX, foodY);
+    int frameCounter = 0;
 
     while (!WindowShouldClose()) {
-        if (!gameOver) {
-            if (IsKeyDown(KEY_RIGHT) && direction != 1) direction = 0;
-            if (IsKeyDown(KEY_LEFT) && direction != 0) direction = 1;
-            if (IsKeyDown(KEY_UP) && direction != 3) direction = 2;
-            if (IsKeyDown(KEY_DOWN) && direction != 2) direction = 3;
+        // Pohyb hráče WSAD + šipky
+        if ((IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) && playerX > 0)
+            playerX -= PLAYER_SPEED;
+        if ((IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) && playerX < SCREEN_WIDTH - PLAYER_WIDTH)
+            playerX += PLAYER_SPEED;
 
-            for (int i = snakeLength; i > 0; i--) {
-                snakeX[i] = snakeX[i - 1];
-                snakeY[i] = snakeY[i - 1];
-            }
+        // Střelba - SPACE, pokud není bullet aktivní
+        if (IsKeyPressed(KEY_SPACE) && !bullet.active) {
+            bullet.x = playerX + PLAYER_WIDTH / 2 - BULLET_WIDTH / 2;
+            bullet.y = playerY;
+            bullet.active = true;
+        }
 
-            if (direction == 0) snakeX[0] += speed;
-            if (direction == 1) snakeX[0] -= speed;
-            if (direction == 2) snakeY[0] -= speed;
-            if (direction == 3) snakeY[0] += speed;
+        // Pohyb bulletu nahoru
+        if (bullet.active) {
+            bullet.y -= BULLET_SPEED;
+            if (bullet.y < 0) bullet.active = false;
+        }
 
-            if (snakeX[0] < 0 || snakeX[0] >= SCREEN_WIDTH || snakeY[0] < 0 || snakeY[0] >= SCREEN_HEIGHT) {
-                gameOver = true;
-            }
-
-            for (int i = 1; i < snakeLength; i++) {
-                if (snakeX[0] == snakeX[i] && snakeY[0] == snakeY[i]) {
-                    gameOver = true;
-                }
-            }
-
-            if (snakeX[0] == foodX && snakeY[0] == foodY) {
-                if (snakeLength < MAX_LENGTH) snakeLength++;
-                foodX = (rand() % (SCREEN_WIDTH / SQUARE_SIZE)) * SQUARE_SIZE;
-                foodY = (rand() % (SCREEN_HEIGHT / SQUARE_SIZE)) * SQUARE_SIZE;
-                printf("Food Spawned: (%d, %d)\n", foodX, foodY);
-                printf("EATEN!\n");
-                score++;
+        // Pohyb alienů dolů
+        for (int i = 0; i < ALIEN_ROWS * ALIEN_COLS; i++) {
+            if (aliens[i].alive) {
+                aliens[i].y += ALIEN_SPEED;
+                // Pokud alien dorazí příliš dolů, můžeš přidat logiku game over atd.
+                if (aliens[i].y > SCREEN_HEIGHT) aliens[i].y = 0; // jednoduchý reset nahoru
             }
         }
+
+        // Kolize bulletu s alieny
+        if (bullet.active) {
+            for (int i = 0; i < ALIEN_ROWS * ALIEN_COLS; i++) {
+                if (aliens[i].alive) {
+                    Rectangle alienRec = {aliens[i].x, aliens[i].y, ALIEN_SIZE, ALIEN_SIZE};
+                    Rectangle bulletRec = {bullet.x, bullet.y, BULLET_WIDTH, BULLET_HEIGHT};
+                    if (CheckCollisionRecs(alienRec, bulletRec)) {
+                        aliens[i].alive = false;
+                        bullet.active = false;
+                        score++;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Zvýšení frameCounter pro blikání
+        frameCounter++;
 
         BeginDrawing();
-        ClearBackground(BLACK);
+        ClearBackground(RAYWHITE);
 
-        if (gameOver) {
-            DrawText("Game Over! Press ESC to Exit", SCREEN_WIDTH / 2 - 150, SCREEN_HEIGHT / 2, 20, RED);
-        } else {
-            for (int i = 0; i < snakeLength; i++) {
-                if (i == 0) {
-                    DrawRectangle(snakeX[i], snakeY[i], SQUARE_SIZE, SQUARE_SIZE, DARKGREEN);
-                } else {
-                    DrawRectangle(snakeX[i], snakeY[i], SQUARE_SIZE, SQUARE_SIZE, GREEN);
-                }
+        // Hráč
+        DrawRectangleV((Vector2){playerX, playerY}, (Vector2){PLAYER_WIDTH, PLAYER_HEIGHT}, DARKBLUE);
+        DrawRectangleLines(playerX, playerY, PLAYER_WIDTH, PLAYER_HEIGHT, BLUE);
+
+        // Aliens
+        for (int i = 0; i < ALIEN_ROWS * ALIEN_COLS; i++) {
+            if (aliens[i].alive) {
+                DrawRectangle(aliens[i].x, aliens[i].y, ALIEN_SIZE, ALIEN_SIZE, GREEN);
+                DrawRectangleLines(aliens[i].x, aliens[i].y, ALIEN_SIZE, ALIEN_SIZE, DARKGREEN);
             }
-            DrawRectangle(foodX, foodY, SQUARE_SIZE, SQUARE_SIZE, RED);
-            DrawText(TextFormat("score: %i", score), 5, 5, 20, WHITE);
         }
+
+        // Bullet bliká zlatě/oranžově podle frameCounter
+        if (bullet.active) {
+            Color bulletColor = (frameCounter % 20 < 10) ? GOLD : ORANGE;
+            DrawRectangle(bullet.x, bullet.y, BULLET_WIDTH, BULLET_HEIGHT, bulletColor);
+        }
+
+        // Score
+        DrawText(TextFormat("Score: %d", score), 10, 10, 20, BLACK);
+
         EndDrawing();
     }
 
