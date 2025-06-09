@@ -15,7 +15,12 @@
 #define BULLET_WIDTH 6
 #define BULLET_HEIGHT 12
 #define BULLET_SPEED 10
-#define MAX_BULLETS 10
+#define MAX_BULLETS 20
+
+#define MAX_ALIEN_BULLETS 20
+#define ALIEN_BULLET_SPEED 4
+
+#define MAX_LIVES 3
 
 const Color ALIEN_COLORS[] = {RED, ORANGE, PURPLE, GREEN, BLUE, MAROON, VIOLET};
 #define NUM_ALIEN_COLORS (sizeof(ALIEN_COLORS)/sizeof(ALIEN_COLORS[0]))
@@ -60,10 +65,13 @@ int main(void) {
     float playerY = SCREEN_HEIGHT - PLAYER_HEIGHT - 10;
 
     Bullet bullets[MAX_BULLETS] = {0};
+    Bullet alienBullets[MAX_ALIEN_BULLETS] = {0};
     Alien aliens[MAX_ALIENS] = {0};
 
     int score = 0;
     int alienSpawnTimer = 0;
+    int alienShootTimer = 0;
+    int lives = MAX_LIVES;
 
     while (!WindowShouldClose()) {
         BeginDrawing();
@@ -76,8 +84,10 @@ int main(void) {
                 if (IsKeyPressed(KEY_ENTER)) {
                     state = GAMEPLAY;
                     score = 0;
+                    lives = MAX_LIVES;
                     for (int i = 0; i < MAX_ALIENS; i++) aliens[i].alive = false;
                     for (int i = 0; i < MAX_BULLETS; i++) bullets[i].active = false;
+                    for (int i = 0; i < MAX_ALIEN_BULLETS; i++) alienBullets[i].active = false;
                 }
                 break;
 
@@ -111,11 +121,30 @@ int main(void) {
                     alienSpawnTimer = 0;
                 }
 
+                alienShootTimer++;
+                if (alienShootTimer > 90) {
+                    for (int i = 0; i < MAX_ALIENS; i++) {
+                        if (aliens[i].alive && rand() % 5 == 0) {
+                            for (int j = 0; j < MAX_ALIEN_BULLETS; j++) {
+                                if (!alienBullets[j].active) {
+                                    alienBullets[j].x = aliens[i].x + ALIEN_SIZE / 2;
+                                    alienBullets[j].y = aliens[i].y + ALIEN_SIZE;
+                                    alienBullets[j].active = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    alienShootTimer = 0;
+                }
+
                 for (int i = 0; i < MAX_ALIENS; i++) {
                     if (aliens[i].alive) {
                         aliens[i].y += 1;
                         if (aliens[i].y > SCREEN_HEIGHT) {
-                            state = GAMEOVER;
+                            lives--;
+                            aliens[i].alive = false;
+                            if (lives <= 0) state = GAMEOVER;
                         }
                     }
                 }
@@ -137,10 +166,29 @@ int main(void) {
                     }
                 }
 
+                for (int i = 0; i < MAX_ALIEN_BULLETS; i++) {
+                    if (alienBullets[i].active) {
+                        alienBullets[i].y += ALIEN_BULLET_SPEED;
+                        if (alienBullets[i].y > SCREEN_HEIGHT) alienBullets[i].active = false;
+                        Rectangle bulletRec = {alienBullets[i].x, alienBullets[i].y, BULLET_WIDTH, BULLET_HEIGHT};
+                        Rectangle playerRec = {playerX, playerY, PLAYER_WIDTH, PLAYER_HEIGHT};
+                        if (CheckCollisionRecs(bulletRec, playerRec)) {
+                            alienBullets[i].active = false;
+                            lives--;
+                            if (lives <= 0) state = GAMEOVER;
+                        }
+                    }
+                }
+
                 DrawPlayer(playerX, playerY);
                 for (int i = 0; i < MAX_BULLETS; i++) {
                     if (bullets[i].active) {
                         DrawRectangle(bullets[i].x, bullets[i].y, BULLET_WIDTH, BULLET_HEIGHT, RED);
+                    }
+                }
+                for (int i = 0; i < MAX_ALIEN_BULLETS; i++) {
+                    if (alienBullets[i].active) {
+                        DrawRectangle(alienBullets[i].x, alienBullets[i].y, BULLET_WIDTH, BULLET_HEIGHT, BLACK);
                     }
                 }
                 for (int i = 0; i < MAX_ALIENS; i++) {
@@ -149,6 +197,7 @@ int main(void) {
                     }
                 }
                 DrawText(TextFormat("Score: %d", score), 10, 10, 20, BLACK);
+                DrawText(TextFormat("Lives: %d", lives), SCREEN_WIDTH - 120, 10, 20, DARKGRAY);
                 break;
 
             case GAMEOVER:
